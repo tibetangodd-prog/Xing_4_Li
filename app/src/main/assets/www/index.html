@@ -734,62 +734,6 @@
       yearInput.value = t.y;
       monthInput.value = t.m;
       dayInput.value = t.d;
-        var dayInput = document.getElementById("dayInput");
-  var errorMsg = document.getElementById("errorMsg");
-  var categoryChipsEl = document.getElementById("categoryChips");
-  var recurrenceChipsEl = document.getElementById("recurrenceChips");
-
-  var modalCategory = "HOMEWORK";
-  var modalRecurrence = "NONE";
-
-  function renderCategoryChips() {
-    categoryChipsEl.innerHTML = "";
-    CATEGORIES.forEach(function (cat) {
-      var chip = document.createElement("div");
-      chip.className = "chip" + (modalCategory === cat.id ? " selected" : "");
-      chip.textContent = cat.label;
-      chip.addEventListener("click", function () {
-        modalCategory = cat.id;
-        renderCategoryChips();
-      });
-      categoryChipsEl.appendChild(chip);
-    });
-  }
-
-  function renderRecurrenceChips() {
-    recurrenceChipsEl.innerHTML = "";
-    RECURRENCES.forEach(function (rec) {
-      var chip = document.createElement("div");
-      chip.className = "chip" + (modalRecurrence === rec.id ? " selected" : "");
-      chip.textContent = rec.label;
-      chip.addEventListener("click", function () {
-        modalRecurrence = rec.id;
-        renderRecurrenceChips();
-      });
-      recurrenceChipsEl.appendChild(chip);
-    });
-  }
-
-  var editingItemId = null;
-  var modalTitleEl = document.getElementById("modalTitle");
-
-  function openModal(existingItem) {
-    if (existingItem && typeof existingItem === "object" && typeof existingItem.id === "string") {
-      editingItemId = existingItem.id;
-      titleInput.value = existingItem.title;
-      yearInput.value = existingItem.year;
-      monthInput.value = existingItem.month;
-      dayInput.value = existingItem.day;
-      modalCategory = existingItem.category;
-      modalRecurrence = existingItem.recurrence;
-      modalTitleEl.textContent = "編輯代辦事項";
-    } else {
-      editingItemId = null;
-      var t = todayYMD();
-      titleInput.value = "";
-      yearInput.value = t.y;
-      monthInput.value = t.m;
-      dayInput.value = t.d;
       modalCategory = "HOMEWORK";
       modalRecurrence = "NONE";
       modalTitleEl.textContent = "新增代辦事項";
