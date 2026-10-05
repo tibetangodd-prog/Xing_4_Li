@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.CalendarApp" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
