@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>行事曆</title>
+<style>
+  :root {
+    --blue: #1565ff;
+    --blue-glow: #4da3ff;
+    --red: #e53935;
+    --gray-border: #e0e0e0;
+    --gray-text: #757575;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #ffffff;
+    color: #000000;
+    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    height: 100%;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* ---- 頂部列 ---- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 10px 16px;
+    border-bottom: 1px solid var(--gray-border);
+    flex-shrink: 0;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #000;
+  }
+  #neonClock {
+    text-align: right;
+    line-height: 1.25;
+  }
+  #neonDate, #neonTime {
+    display: block;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  #neonDate { font-size: 12px; }
+  #neonTime { font-size: 16px; }
+
+  /* ---- 類別篩選 ---- */
+  #filterRow {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--gray-border);
+    -webkit-overflow-scrolling: touch;
+  }
+  #filterRow::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid #bdbdbd;
+    background: #fff;
+    color: #333;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .chip.selected {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+  }
+
+  /* ---- 分頁 Tabs ---- */
+  #tabs {
+    display: flex;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--gray-border);
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    font-size: 14px;
+    color: #757575;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active {
+    color: #000;
+    font-weight: 700;
+    border-bottom-color: #000;
+  }
+
+  /* ---- 清單 ---- */
+  #listArea {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #emptyState {
+    text-align: center;
+    color: #9e9e9e;
+    padding: 48px 16px;
+    font-size: 14px;
+  }
+
+  .item-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--gray-border);
+    transition: opacity 0.65s ease-out, transform 0.65s ease-out;
+    overflow: hidden;
+  }
+  .item-row.disintegrating {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  .checkbox {
+    width: 24px; height: 24px;
+    flex-shrink: 0;
+    border: 2px solid #9e9e9e;
+    border-radius: 6px;
+    margin-right: 6px;
+    position: relative;
+  }
+  .checkbox.checked {
+    background: #000;
+    border-color: #000;
+  }
+  .checkbox.checked::after {
+    content: "";
+    position: absolute;
+    left: 6px; top: 2px;
+    width: 6px; height: 11px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .star-btn {
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    color: #cfcfcf;
+    background: none; border: none;
+  }
+  .star-btn.on { color: var(--blue); }
+
+  .item-main { flex: 1; min-width: 0; }
+  .item-title {
+    font-size: 16px;
+    color: #000;
+    word-break: break-word;
+  }
+  .item-title.highlighted {
+    color: var(--blue);
+    text-shadow: 0 0 10px var(--blue-glow);
+  }
+  .item-title.overdue {
+    color: var(--red) !important;
+    text-shadow: none !important;
+  }
+  .item-title.completed { color: #000; }
+
+  .item-meta {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--gray-text);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .item-meta .cat { color: #424242; }
+  .item-meta .recur { color: var(--blue); }
+
+  .edit-btn {
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    color: #9e9e9e;
+    background: none; border: none;
+  }
+
+  .delete-btn {
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    color: #9e9e9e;
+    background: none; border: none;
+  }
+
+  .dust {
+    position: absolute;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #9e9e9e;
+    left: 0; top: 0;
+    opacity: 1;
+    pointer-events: none;
+    animation: dustFly 0.65s ease-out forwards;
+  }
+  @keyframes dustFly {
+    to { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
+  }
+
+  /* ---- FAB ---- */
+  #fab {
+    position: fixed;
+    right: 20px;
+    bottom: 24px;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: #000;
+    color: #fff;
+    font-size: 28px;
+    border: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ---- Modal ---- */
+  #modalOverlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: flex-end;
+    z-index: 50;
+  }
+  #modalOverlay.show { display: flex; }
+  #modalSheet {
+    background: #fff;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 18px 18px 24px 18px;
+  }
+  #modalSheet h2 {
+    margin: 0 0 14px 0;
+    font-size: 18px;
+  }
+  .field-label {
+    font-size: 13px;
+    color: #424242;
+    margin: 14px 0 6px 0;
+    font-weight: 600;
+  }
+  #titleInput {
+    width: 100%;
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid #bdbdbd;
+    border-radius: 8px;
+    color: #000;
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .date-row { display: flex; gap: 6px; }
+  .date-input {
+    flex: 1;
+    font-size: 16px;
+    padding: 10px 8px;
+    border: 1px solid #bdbdbd;
+    border-radius: 8px;
+    text-align: center;
+    color: #000;
+  }
+  #errorMsg {
+    color: var(--red);
+    font-size: 12px;
+    margin-top: 8px;
+    min-height: 14px;
+  }
+  .modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .btn {
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    font-size: 15px;
+  }
+  .btn-cancel { background: #f0f0f0; color: #000; }
+  .btn-save { background: #000; color: #fff; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>行事曆</h1>
+    <div id="neonClock">
+      <span id="neonDate">----/--/--</span>
+      <span id="neonTime">--:--:--</span>
+    </div>
+  </header>
+
+  <div id="filterRow"></div>
+
+  <div id="tabs">
+    <div class="tab active" data-tab="pending">待辦 (<span id="pendingCount">0</span>)</div>
+    <div class="tab" data-tab="completed">已完成 (<span id="completedCount">0</span>)</div>
+  </div>
+
+  <div id="listArea">
+    <div id="list"></div>
+    <div id="emptyState" style="display:none;"></div>
+  </div>
+
+  <button id="fab">＋</button>
+</div>
+
+<div id="modalOverlay">
+  <div id="modalSheet">
+    <h2 id="modalTitle">新增代辦事項</h2>
+
+    <div class="field-label">事項名稱</div>
+    <input id="titleInput" type="text" placeholder="輸入事項名稱" />
+
+    <div class="field-label">類別</div>
+    <div class="chip-row" id="categoryChips"></div>
+
+    <div class="field-label">日期（年 / 月 / 日）</div>
+    <div class="date-row">
+      <input id="yearInput" class="date-input" type="number" placeholder="年" />
+      <input id="monthInput" class="date-input" type="number" placeholder="月" />
+      <input id="dayInput" class="date-input" type="number" placeholder="日" />
+    </div>
+
+    <div class="field-label">重複</div>
+    <div class="chip-row" id="recurrenceChips"></div>
+
+    <div id="errorMsg"></div>
+
+    <div class="modal-buttons">
+      <button class="btn btn-cancel" id="cancelBtn">取消</button>
+      <button class="btn btn-save" id="saveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ===== 常數定義 =====
+  var CATEGORIES = [
+    { id: "HOMEWORK", label: "作業" },
+    { id: "EXAM", label: "考試" },
+    { id: "HOLIDAY", label: "節慶假日" },
+    { id: "OTHER", label: "其他" }
+  ];
+  var RECURRENCES = [
+    { id: "NONE", label: "不重複" },
+    { id: "MONTHLY", label: "每月同一天" },
+    { id: "YEARLY", label: "每年同月同日" }
+  ];
+  var STORAGE_KEY = "calendarapp_todos_v1";
+  var FILTER_KEY = "calendarapp_filter_v1";
+
+  // ===== 資料存取（localStorage，存在 App 內部儲存空間，清快取不會刪） =====
+  function loadTodos() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function saveTodos(todos) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+  }
+  function loadFilter() {
+    try {
+      var raw = localStorage.getItem(FILTER_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return CATEGORIES.map(function (c) { return c.id; });
+  }
+  function saveFilter(filter) {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(filter));
+  }
+
+  var todos = loadTodos();
+  var selectedCategories = loadFilter();
+  var currentTab = "pending";
+
+  function genId() {
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function categoryLabel(id) {
+    for (var i = 0; i < CATEGORIES.length; i++) {
+      if (CATEGORIES[i].id === id) return CATEGORIES[i].label;
+    }
+    return id;
+  }
+  function recurrenceLabel(id) {
+    for (var i = 0; i < RECURRENCES.length; i++) {
+      if (RECURRENCES[i].id === id) return RECURRENCES[i].label;
+    }
+    return id;
+  }
+
+  function todayYMD() {
+    var now = new Date();
+    return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+  }
+
+  function dateKey(y, m, d) {
+    return y * 10000 + m * 100 + d;
+  }
+
+  var WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+  function weekdayLabel(y, m, d) {
+    var idx = new Date(y, m - 1, d).getDay();
+    return "星期" + WEEKDAY_LABELS[idx];
+  }
+
+  function isOverdue(item) {
+    if (item.isCompleted) return false;
+    var t = todayYMD();
+    return dateKey(item.year, item.month, item.day) < dateKey(t.y, t.m, t.d);
+  }
+
+  function daysInMonth(y, m) {
+    return new Date(y, m, 0).getDate();
+  }
+
+  function nextOccurrenceDate(item) {
+    var y = item.year, m = item.month, d = item.day;
+    if (item.recurrence === "MONTHLY") {
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+      d = Math.min(d, daysInMonth(y, m));
+      return { year: y, month: m, day: d };
+    }
+    if (item.recurrence === "YEARLY") {
+      y += 1;
+      d = Math.min(d, daysInMonth(y, m));
+      return { year: y, month: m, day: d };
+    }
+    return null;
+  }
+
+  // ===== 類別篩選列 =====
+  var filterRow = document.getElementById("filterRow");
+  function renderFilterRow() {
+    filterRow.innerHTML = "";
+    var allSelected = selectedCategories.length === CATEGORIES.length;
+    var allChip = document.createElement("div");
+    allChip.className = "chip" + (allSelected ? " selected" : "");
+    allChip.textContent = "全選";
+    allChip.addEventListener("click", function () {
+      selectedCategories = allSelected ? [] : CATEGORIES.map(function (c) { return c.id; });
+      saveFilter(selectedCategories);
+      renderFilterRow();
+      renderList();
+    });
+    filterRow.appendChild(allChip);
+
+    CATEGORIES.forEach(function (cat) {
+      var chip = document.createElement("div");
+      var on = selectedCategories.indexOf(cat.id) !== -1;
+      chip.className = "chip" + (on ? " selected" : "");
+      chip.textContent = cat.label;
+      chip.addEventListener("click", function () {
+        var idx = selectedCategories.indexOf(cat.id);
+        if (idx === -1) selectedCategories.push(cat.id);
+        else selectedCategories.splice(idx, 1);
+        saveFilter(selectedCategories);
+        renderFilterRow();
+        renderList();
+      });
+      filterRow.appendChild(chip);
+    });
+  }
+
+  // ===== Tabs =====
+  var tabEls = document.querySelectorAll(".tab");
+  tabEls.forEach(function (el) {
+    el.addEventListener("click", function () {
+      currentTab = el.getAttribute("data-tab");
+      tabEls.forEach(function (t) { t.classList.remove("active"); });
+      el.classList.add("active");
+      renderList();
+    });
+  });
+
+  // ===== 清單渲染 =====
+  var listEl = document.getElementById("list");
+  var emptyEl = document.getElementById("emptyState");
+  var pendingCountEl = document.getElementById("pendingCount");
+  var completedCountEl = document.getElementById("completedCount");
+
+  function sortedFiltered(completedFlag) {
+    return todos
+      .filter(function (t) { return t.isCompleted === completedFlag && selectedCategories.indexOf(t.category) !== -1; })
+      .sort(function (a, b) {
+        return dateKey(a.year, a.month, a.day) - dateKey(b.year, b.month, b.day);
+      });
+  }
+
+  function renderList() {
+    var pending = sortedFiltered(false);
+    var completed = sortedFiltered(true);
+    pendingCountEl.textContent = pending.length;
+    completedCountEl.textContent = completed.length;
+
+    var list = currentTab === "pending" ? pending : completed;
+    listEl.innerHTML = "";
+
+    if (list.length === 0) {
+      emptyEl.style.display = "block";
+      emptyEl.textContent = currentTab === "pending" ? "目前沒有待辦事項" : "尚未有完成的事項";
+      return;
+    }
+    emptyEl.style.display = "none";
+
+    list.forEach(function (item) {
+      listEl.appendChild(buildRow(item));
+    });
+  }
+
+  function buildRow(item) {
+    var row = document.createElement("div");
+    row.className = "item-row";
+    row.setAttribute("data-id", item.id);
+
+    // checkbox
+    var cb = document.createElement("div");
+    cb.className = "checkbox" + (item.isCompleted ? " checked" : "");
+    cb.addEventListener("click", function () {
+      if (!item.isCompleted) {
+        disintegrateAndComplete(item, row);
+      } else {
+        item.isCompleted = false;
+        saveTodos(todos);
+        renderList();
+      }
+    });
+    row.appendChild(cb);
+
+    // star
+    var star = document.createElement("button");
+    star.className = "star-btn" + (item.isHighlighted ? " on" : "");
+    star.textContent = "★";
+    star.addEventListener("click", function () {
+      item.isHighlighted = !item.isHighlighted;
+      saveTodos(todos);
+      renderList();
+    });
+    row.appendChild(star);
+
+    // main
+    var main = document.createElement("div");
+    main.className = "item-main";
+
+    var title = document.createElement("div");
+    var titleClasses = ["item-title"];
+    if (item.isCompleted) titleClasses.push("completed");
+    else if (isOverdue(item)) titleClasses.push("overdue");
+    else if (item.isHighlighted) titleClasses.push("highlighted");
+    title.className = titleClasses.join(" ");
+    title.textContent = item.title;
+    main.appendChild(title);
+
+    var meta = document.createElement("div");
+    meta.className = "item-meta";
+    var dateSpan = document.createElement("span");
+    dateSpan.textContent = pad4(item.year) + "/" + pad2(item.month) + "/" + pad2(item.day) +
+      "（" + weekdayLabel(item.year, item.month, item.day) + "）";
+    meta.appendChild(dateSpan);
+    var catSpan = document.createElement("span");
+    catSpan.className = "cat";
+    catSpan.textContent = "【" + categoryLabel(item.category) + "】";
+    meta.appendChild(catSpan);
+    if (item.recurrence && item.recurrence !== "NONE") {
+      var recurSpan = document.createElement("span");
+      recurSpan.className = "recur";
+      recurSpan.textContent = "🔁 " + recurrenceLabel(item.recurrence);
+      meta.appendChild(recurSpan);
+    }
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    // edit
+    var edit = document.createElement("button");
+    edit.className = "edit-btn";
+    edit.textContent = "✎";
+    edit.addEventListener("click", function () {
+      openModal(item);
+    });
+    row.appendChild(edit);
+
+    // delete
+    var del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "🗑";
+    del.addEventListener("click", function () {
+      todos = todos.filter(function (t) { return t.id !== item.id; });
+      saveTodos(todos);
+      renderList();
+    });
+    row.appendChild(del);
+
+    return row;
+  }
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function pad4(n) { return ("000" + n).slice(-4); }
+
+  // ===== 灰飛煙滅動畫 =====
+  function disintegrateAndComplete(item, row) {
+    var rect = row.getBoundingClientRect();
+    var count = 26;
+    for (var i = 0; i < count; i++) {
+      var dust = document.createElement("div");
+      dust.className = "dust";
+      var x = Math.random() * rect.width;
+      var y = Math.random() * rect.height;
+      var angle = Math.random() * Math.PI * 2;
+      var dist = 40 + Math.random() * 90;
+      var dx = Math.cos(angle) * dist;
+      var dy = Math.sin(angle) * dist - 30;
+      dust.style.left = x + "px";
+      dust.style.top = y + "px";
+      dust.style.setProperty("--dx", dx + "px");
+      dust.style.setProperty("--dy", dy + "px");
+      row.appendChild(dust);
+    }
+    row.classList.add("disintegrating");
+
+    setTimeout(function () {
+      item.isCompleted = true;
+      // 重複事項：完成時自動排下一次
+      var next = nextOccurrenceDate(item);
+      if (next) {
+        todos.push({
+          id: genId(),
+          title: item.title,
+          category: item.category,
+          year: next.year,
+          month: next.month,
+          day: next.day,
+          isHighlighted: false,
+          isCompleted: false,
+          recurrence: item.recurrence,
+          createdAt: Date.now()
+        });
+      }
+      saveTodos(todos);
+      renderList();
+    }, 650);
+  }
+
+  // ===== 新增事項 Modal =====
+  var modalOverlay = document.getElementById("modalOverlay");
+  var titleInput = document.getElementById("titleInput");
+  var yearInput = document.getElementById("yearInput");
+  var monthInput = document.getElementById("monthInput");
+  var dayInput = document.getElementById("dayInput");
+  var errorMsg = document.getElementById("errorMsg");
+  var categoryChipsEl = document.getElementById("categoryChips");
+  var recurrenceChipsEl = document.getElementById("recurrenceChips");
+
+  var modalCategory = "HOMEWORK";
+  var modalRecurrence = "NONE";
+
+  function renderCategoryChips() {
+    categoryChipsEl.innerHTML = "";
+    CATEGORIES.forEach(function (cat) {
+      var chip = document.createElement("div");
+      chip.className = "chip" + (modalCategory === cat.id ? " selected" : "");
+      chip.textContent = cat.label;
+      chip.addEventListener("click", function () {
+        modalCategory = cat.id;
+        renderCategoryChips();
+      });
+      categoryChipsEl.appendChild(chip);
+    });
+  }
+
+  function renderRecurrenceChips() {
+    recurrenceChipsEl.innerHTML = "";
+    RECURRENCES.forEach(function (rec) {
+      var chip = document.createElement("div");
+      chip.className = "chip" + (modalRecurrence === rec.id ? " selected" : "");
+      chip.textContent = rec.label;
+      chip.addEventListener("click", function () {
+        modalRecurrence = rec.id;
+        renderRecurrenceChips();
+      });
+      recurrenceChipsEl.appendChild(chip);
+    });
+  }
+
+  var editingItemId = null;
+  var modalTitleEl = document.getElementById("modalTitle");
+
+  function openModal(existingItem) {
+    if (existingItem && typeof existingItem === "object" && typeof existingItem.id === "string") {
+      editingItemId = existingItem.id;
+      titleInput.value = existingItem.title;
+      yearInput.value = existingItem.year;
+      monthInput.value = existingItem.month;
+      dayInput.value = existingItem.day;
+      modalCategory = existingItem.category;
+      modalRecurrence = existingItem.recurrence;
+      modalTitleEl.textContent = "編輯代辦事項";
+    } else {
+      editingItemId = null;
+      var t = todayYMD();
+      titleInput.value = "";
+      yearInput.value = t.y;
+      monthInput.value = t.m;
+      dayInput.value = t.d;
+        var dayInput = document.getElementById("dayInput");
+  var errorMsg = document.getElementById("errorMsg");
+  var categoryChipsEl = document.getElementById("categoryChips");
+  var recurrenceChipsEl = document.getElementById("recurrenceChips");
+
+  var modalCategory = "HOMEWORK";
+  var modalRecurrence = "NONE";
+
+  function renderCategoryChips() {
+    categoryChipsEl.innerHTML = "";
+    CATEGORIES.forEach(function (cat) {
+      var chip = document.createElement("div");
+      chip.className = "chip" + (modalCategory === cat.id ? " selected" : "");
+      chip.textContent = cat.label;
+      chip.addEventListener("click", function () {
+        modalCategory = cat.id;
+        renderCategoryChips();
+      });
+      categoryChipsEl.appendChild(chip);
+    });
+  }
+
+  function renderRecurrenceChips() {
+    recurrenceChipsEl.innerHTML = "";
+    RECURRENCES.forEach(function (rec) {
+      var chip = document.createElement("div");
+      chip.className = "chip" + (modalRecurrence === rec.id ? " selected" : "");
+      chip.textContent = rec.label;
+      chip.addEventListener("click", function () {
+        modalRecurrence = rec.id;
+        renderRecurrenceChips();
+      });
+      recurrenceChipsEl.appendChild(chip);
+    });
+  }
+
+  var editingItemId = null;
+  var modalTitleEl = document.getElementById("modalTitle");
+
+  function openModal(existingItem) {
+    if (existingItem && typeof existingItem === "object" && typeof existingItem.id === "string") {
+      editingItemId = existingItem.id;
+      titleInput.value = existingItem.title;
+      yearInput.value = existingItem.year;
+      monthInput.value = existingItem.month;
+      dayInput.value = existingItem.day;
+      modalCategory = existingItem.category;
+      modalRecurrence = existingItem.recurrence;
+      modalTitleEl.textContent = "編輯代辦事項";
+    } else {
+      editingItemId = null;
+      var t = todayYMD();
+      titleInput.value = "";
+      yearInput.value = t.y;
+      monthInput.value = t.m;
+      dayInput.value = t.d;
+      modalCategory = "HOMEWORK";
+      modalRecurrence = "NONE";
+      modalTitleEl.textContent = "新增代辦事項";
+    }
+    errorMsg.textContent = "";
+    renderCategoryChips();
+    renderRecurrenceChips();
+    modalOverlay.classList.add("show");
+  }
+  function closeModal() {
+    editingItemId = null;
+    modalOverlay.classList.remove("show");
+  }
+
+  document.getElementById("fab").addEventListener("click", function () {
+    openModal();
+  });
+  document.getElementById("cancelBtn").addEventListener("click", closeModal);
+  modalOverlay.addEventListener("click", function (e) {
+    if (e.target === modalOverlay) closeModal();
+  });
+
+  function isValidDate(y, m, d) {
+    if (!y || !m || !d) return false;
+    if (m < 1 || m > 12) return false;
+    if (d < 1 || d > daysInMonth(y, m)) return false;
+    return true;
+  }
+
+  document.getElementById("saveBtn").addEventListener("click", function () {
+    var title = titleInput.value.trim();
+    var y = parseInt(yearInput.value, 10);
+    var m = parseInt(monthInput.value, 10);
+    var d = parseInt(dayInput.value, 10);
+
+    if (!title) {
+      errorMsg.textContent = "請輸入事項名稱";
+      return;
+    }
+    if (!isValidDate(y, m, d)) {
+      errorMsg.textContent = "日期不合法，請確認年/月/日是否正確";
+      return;
+    }
+
+    if (editingItemId) {
+      var existing = null;
+      for (var i = 0; i < todos.length; i++) {
+        if (todos[i].id === editingItemId) { existing = todos[i]; break; }
+      }
+      if (existing) {
+        existing.title = title;
+        existing.category = modalCategory;
+        existing.year = y;
+        existing.month = m;
+        existing.day = d;
+        existing.recurrence = modalRecurrence;
+      }
+    } else {
+      todos.push({
+        id: genId(),
+        title: title,
+        category: modalCategory,
+        year: y,
+        month: m,
+        day: d,
+        isHighlighted: false,
+        isCompleted: false,
+        recurrence: modalRecurrence,
+        createdAt: Date.now()
+      });
+    }
+    saveTodos(todos);
+    closeModal();
+    renderList();
+  });
+
+  // ===== 頂部霓虹日期時間（台灣時間，顏色持續變換＋發光） =====
+  var neonDateEl = document.getElementById("neonDate");
+  var neonTimeEl = document.getElementById("neonTime");
+
+  function updateClock() {
+    var parts;
+    try {
+      var fmt = new Intl.DateTimeFormat("zh-TW", {
+        timeZone: "Asia/Taipei",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        hourCycle: "h23"
+      });
+      parts = {};
+      fmt.formatToParts(new Date()).forEach(function (p) { parts[p.type] = p.value; });
+    } catch (e) {
+      // 若環境不支援 Intl timeZone，退回使用裝置時間（手機裝置幾乎都支援，這只是保險）
+      var now = new Date();
+      parts = {
+        year: now.getFullYear(), month: pad2(now.getMonth() + 1), day: pad2(now.getDate()),
+        hour: pad2(now.getHours()), minute: pad2(now.getMinutes()), second: pad2(now.getSeconds())
+      };
+    }
+    neonDateEl.textContent = parts.year + "/" + parts.month + "/" + parts.day;
+    neonTimeEl.textContent = parts.hour + ":" + parts.minute + ":" + parts.second;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // 霓虹色彩循環（約 5 秒一個循環）
+  var hueStart = null;
+  function tickNeonColor(ts) {
+    if (hueStart === null) hueStart = ts;
+    var elapsed = ts - hueStart;
+    var hue = (elapsed / 5000 * 360) % 360;
+    var color = "hsl(" + hue.toFixed(0) + ", 85%, 55%)";
+    neonDateEl.style.color = color;
+    neonDateEl.style.textShadow = "0 0 10px " + color;
+    neonTimeEl.style.color = color;
+    neonTimeEl.style.textShadow = "0 0 14px " + color;
+    requestAnimationFrame(tickNeonColor);
+  }
+  requestAnimationFrame(tickNeonColor);
+
+  // ===== 初始化 =====
+  renderFilterRow();
+  renderList();
+})();
+</script>
+</body>
+</html>
