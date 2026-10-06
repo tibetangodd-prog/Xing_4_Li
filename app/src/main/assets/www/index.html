@@ -302,9 +302,38 @@
   }
   .btn-cancel { background: #f0f0f0; color: #000; }
   .btn-save { background: #000; color: #fff; font-weight: 600; }
+
+  /* ---- 除錯訊息橫幅 ---- */
+  #debugBanner {
+    display: none;
+    position: fixed;
+    left: 8px; right: 8px; top: 8px;
+    z-index: 999;
+    background: #ffebee;
+    border: 2px solid var(--red);
+    color: #b71c1c;
+    font-size: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    max-height: 40vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #debugBanner .close-debug {
+    display: block;
+    margin-top: 8px;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 </style>
 </head>
 <body>
+<div id="debugBanner"></div>
 <div id="app">
   <header>
     <h1>行事曆</h1>
@@ -358,6 +387,29 @@
   </div>
 </div>
 
+<script>
+  // ===== 全域除錯訊息顯示（沒有電腦可開 DevTools，所以把錯誤直接顯示在畫面上） =====
+  window.onerror = function (message, source, lineno, colno) {
+    try {
+      var banner = document.getElementById("debugBanner");
+      banner.style.display = "block";
+      var text = document.createElement("div");
+      text.textContent = "錯誤：" + message + "\n位置：第 " + lineno + " 行，第 " + colno + " 字";
+      banner.appendChild(text);
+      if (!banner.querySelector(".close-debug")) {
+        var btn = document.createElement("button");
+        btn.className = "close-debug";
+        btn.textContent = "關閉此訊息";
+        btn.addEventListener("click", function () {
+          banner.style.display = "none";
+          banner.innerHTML = "";
+        });
+        banner.appendChild(btn);
+      }
+    } catch (e) {}
+    return false;
+  };
+</script>
 <script>
 (function () {
   "use strict";
@@ -764,50 +816,57 @@
   }
 
   document.getElementById("saveBtn").addEventListener("click", function () {
-    var title = titleInput.value.trim();
-    var y = parseInt(yearInput.value, 10);
-    var m = parseInt(monthInput.value, 10);
-    var d = parseInt(dayInput.value, 10);
+    try {
+      var title = titleInput.value.trim();
+      var y = parseInt(yearInput.value, 10);
+      var m = parseInt(monthInput.value, 10);
+      var d = parseInt(dayInput.value, 10);
 
-    if (!title) {
-      errorMsg.textContent = "請輸入事項名稱";
-      return;
-    }
-    if (!isValidDate(y, m, d)) {
-      errorMsg.textContent = "日期不合法，請確認年/月/日是否正確";
-      return;
-    }
+      if (!title) {
+        errorMsg.textContent = "請輸入事項名稱";
+        return;
+      }
+      if (!isValidDate(y, m, d)) {
+        errorMsg.textContent = "日期不合法，請確認年/月/日是否正確";
+        return;
+      }
 
-    if (editingItemId) {
-      var existing = null;
-      for (var i = 0; i < todos.length; i++) {
-        if (todos[i].id === editingItemId) { existing = todos[i]; break; }
+      if (editingItemId) {
+        var existing = null;
+        for (var i = 0; i < todos.length; i++) {
+          if (todos[i].id === editingItemId) { existing = todos[i]; break; }
+        }
+        if (existing) {
+          existing.title = title;
+          existing.category = modalCategory;
+          existing.year = y;
+          existing.month = m;
+          existing.day = d;
+          existing.recurrence = modalRecurrence;
+        }
+      } else {
+        todos.push({
+          id: genId(),
+          title: title,
+          category: modalCategory,
+          year: y,
+          month: m,
+          day: d,
+          isHighlighted: false,
+          isCompleted: false,
+          recurrence: modalRecurrence,
+          createdAt: Date.now()
+        });
       }
-      if (existing) {
-        existing.title = title;
-        existing.category = modalCategory;
-        existing.year = y;
-        existing.month = m;
-        existing.day = d;
-        existing.recurrence = modalRecurrence;
+      saveTodos(todos);
+      closeModal();
+      renderList();
+    } catch (err) {
+      errorMsg.textContent = "儲存時發生錯誤：" + (err && err.message ? err.message : err);
+      if (typeof window.onerror === "function") {
+        window.onerror(err && err.message ? err.message : String(err), "saveBtn", 0, 0);
       }
-    } else {
-      todos.push({
-        id: genId(),
-        title: title,
-        category: modalCategory,
-        year: y,
-        month: m,
-        day: d,
-        isHighlighted: false,
-        isCompleted: false,
-        recurrence: modalRecurrence,
-        createdAt: Date.now()
-      });
     }
-    saveTodos(todos);
-    closeModal();
-    renderList();
   });
 
   // ===== 頂部霓虹日期時間（台灣時間，顏色持續變換＋發光） =====
