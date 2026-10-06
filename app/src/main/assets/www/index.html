@@ -82,6 +82,43 @@
     border-color: #000;
   }
 
+  /* ---- 資料匯出/匯入列 ---- */
+  #dataActions {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--gray-border);
+    flex-shrink: 0;
+  }
+  .data-btn {
+    flex: 1;
+    font-size: 13px;
+    padding: 8px 0;
+    border-radius: 8px;
+    border: 1px solid #bdbdbd;
+    background: #fff;
+    color: #333;
+  }
+
+  /* ---- 成功訊息小提示 ---- */
+  #toast {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #000;
+    color: #fff;
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 70;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
   /* ---- 分頁 Tabs ---- */
   #tabs {
     display: flex;
@@ -303,6 +340,42 @@
   .btn-cancel { background: #f0f0f0; color: #000; }
   .btn-save { background: #000; color: #fff; font-weight: 600; }
 
+  /* ---- 匯入確認視窗 ---- */
+  #importConfirmOverlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    padding: 24px;
+  }
+  #importConfirmOverlay.show { display: flex; }
+  #importConfirmSheet {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    width: 100%;
+    max-width: 320px;
+  }
+  #importConfirmSheet p {
+    font-size: 14px;
+    color: #333;
+    margin: 0 0 10px 0;
+    white-space: pre-wrap;
+  }
+  #importTextarea {
+    width: 100%;
+    height: 140px;
+    font-size: 13px;
+    padding: 10px;
+    border: 1px solid #bdbdbd;
+    border-radius: 8px;
+    color: #000;
+    resize: none;
+    margin-bottom: 12px;
+  }
+
   /* ---- 除錯訊息橫幅 ---- */
   #debugBanner {
     display: none;
@@ -345,6 +418,12 @@
 
   <div id="filterRow"></div>
 
+  <div id="dataActions">
+    <button class="data-btn" id="exportBtn">複製備份</button>
+    <button class="data-btn" id="importBtn">貼上還原</button>
+  </div>
+  <div id="toast"></div>
+
   <div id="tabs">
     <div class="tab active" data-tab="pending">待辦 (<span id="pendingCount">0</span>)</div>
     <div class="tab" data-tab="completed">已完成 (<span id="completedCount">0</span>)</div>
@@ -383,6 +462,17 @@
     <div class="modal-buttons">
       <button class="btn btn-cancel" id="cancelBtn">取消</button>
       <button class="btn btn-save" id="saveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="importConfirmOverlay">
+  <div id="importConfirmSheet">
+    <p id="importMsg">把之前複製的備份文字貼在下面，按「套用」會取代目前所有資料：</p>
+    <textarea id="importTextarea" placeholder="在這裡貼上備份文字"></textarea>
+    <div class="modal-buttons">
+      <button class="btn btn-cancel" id="importCancelBtn">取消</button>
+      <button class="btn btn-save" id="importConfirmBtn">套用（取代資料）</button>
     </div>
   </div>
 </div>
@@ -912,6 +1002,145 @@
     requestAnimationFrame(tickNeonColor);
   }
   requestAnimationFrame(tickNeonColor);
+
+  // ===== 小提示（複製成功等訊息） =====
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
+  function showToast(text) {
+    toastEl.textContent = text;
+    toastEl.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toastEl.classList.remove("show");
+    }, 1800);
+  }
+
+  // ===== 備份匯出／匯入（純文字，複製貼上） =====
+  // 格式（每筆一行，以 | 分隔，盡量精簡）：
+  // id|title|類別代碼|年|月|日|星星(0/1)|完成(0/1)|重複代碼|建立時間
+  // 類別代碼：0=作業 1=考試 2=節慶假日 3=其他
+  // 重複代碼：0=不重複 1=每月同一天 2=每年同月同日
+  var CATEGORY_CODES = ["HOMEWORK", "EXAM", "HOLIDAY", "OTHER"];
+  var RECURRENCE_CODES = ["NONE", "MONTHLY", "YEARLY"];
+
+  function escField(v) {
+    return String(v).replace(/\|/g, "／").replace(/\n/g, " ").replace(/\r/g, "");
+  }
+
+  function buildExportText() {
+    var lines = ["CAL1"];
+    todos.forEach(function (t) {
+      var catCode = CATEGORY_CODES.indexOf(t.category);
+      if (catCode === -1) catCode = 3;
+      var recCode = RECURRENCE_CODES.indexOf(t.recurrence);
+      if (recCode === -1) recCode = 0;
+      lines.push([
+        t.id,
+        escField(t.title),
+        catCode,
+        t.year,
+        t.month,
+        t.day,
+        t.isHighlighted ? 1 : 0,
+        t.isCompleted ? 1 : 0,
+        recCode,
+        t.createdAt || Date.now()
+      ].join("|"));
+    });
+    return lines.join("\n");
+  }
+
+  function parseImportText(text) {
+    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l.length > 0; });
+    var result = [];
+    lines.forEach(function (line) {
+      if (line === "CAL1") return;
+      var parts = line.split("|");
+      if (parts.length < 10) return;
+      var catCode = parseInt(parts[2], 10);
+      var recCode = parseInt(parts[8], 10);
+      result.push({
+        id: parts[0] || genId(),
+        title: parts[1],
+        category: CATEGORY_CODES[catCode] || "OTHER",
+        year: parseInt(parts[3], 10),
+        month: parseInt(parts[4], 10),
+        day: parseInt(parts[5], 10),
+        isHighlighted: parts[6] === "1",
+        isCompleted: parts[7] === "1",
+        recurrence: RECURRENCE_CODES[recCode] || "NONE",
+        createdAt: parseInt(parts[9], 10) || Date.now()
+      });
+    });
+    return result;
+  }
+
+  function copyToClipboard(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    try {
+      var text = buildExportText();
+      var ok = copyToClipboard(text);
+      if (ok) {
+        showToast("已複製備份文字（共 " + todos.length + " 筆）");
+      } else {
+        showToast("複製失敗，請手動截圖或聯絡確認");
+      }
+    } catch (err) {
+      if (typeof window.onerror === "function") {
+        window.onerror(err && err.message ? err.message : String(err), "exportBtn", 0, 0);
+      }
+    }
+  });
+
+  var importOverlay = document.getElementById("importConfirmOverlay");
+  var importTextarea = document.getElementById("importTextarea");
+
+  document.getElementById("importBtn").addEventListener("click", function () {
+    importTextarea.value = "";
+    importOverlay.classList.add("show");
+  });
+  document.getElementById("importCancelBtn").addEventListener("click", function () {
+    importOverlay.classList.remove("show");
+  });
+  importOverlay.addEventListener("click", function (e) {
+    if (e.target === importOverlay) importOverlay.classList.remove("show");
+  });
+  document.getElementById("importConfirmBtn").addEventListener("click", function () {
+    try {
+      var parsed = parseImportText(importTextarea.value);
+      if (parsed.length === 0) {
+        showToast("沒有讀到任何有效的資料");
+        return;
+      }
+      todos = parsed;
+      saveTodos(todos);
+      importOverlay.classList.remove("show");
+      renderFilterRow();
+      renderList();
+      showToast("已匯入 " + parsed.length + " 筆，資料已取代");
+    } catch (err) {
+      if (typeof window.onerror === "function") {
+        window.onerror(err && err.message ? err.message : String(err), "importConfirmBtn", 0, 0);
+      }
+    }
+  });
 
   // ===== 初始化 =====
   renderFilterRow();
